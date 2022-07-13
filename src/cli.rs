@@ -8,6 +8,8 @@ pub struct RedisDumpCli {
     //// Ping the redis server
     #[clap(short = 'p', long = "ping", value_parser)]
     pub ping: bool,
+    #[clap(short = 'u', long = "uri", value_parser)]
+    pub uri: Option<String>,
 }
 
 /// A tool for restoring Redis databases from a file
