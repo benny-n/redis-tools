@@ -2,10 +2,15 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use dotenv::dotenv;
 use redis::{self, Commands};
-use redis_tools::{cli::RedisDumpCli, common::get_uri, consts::RED};
+use redis_tools::{
+    cli::RedisDumpCli,
+    common::{get_database_from_url, get_url},
+    consts::RED,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
+use url::Url;
 
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
@@ -19,11 +24,45 @@ pub enum RedisValue {
 }
 
 pub fn dump_into_json(
-    uri: String,
+    url: Url,
+    database: Option<u8>,
     keys_to_dump: Option<Vec<String>>,
 ) -> Result<JsonValue, anyhow::Error> {
+    let mut redis_json = HashMap::<String, RedisValue>::new();
+    let dbs = if let Some(db) = get_database_from_url(&url) {
+        // If a db was specified in the url, use it.
+        vec![db]
+    } else if let Some(db) = database {
+        // If a db was specified in the command line, use it.
+        vec![db]
+    } else {
+        //Otherwise, use all the default dbs (0..=15).
+        Vec::from_iter(0..=15)
+    };
+
+    for db in dbs {
+        eprintln!("Dumping database: {}", db);
+        let url = format!(
+            "{}://{}:{}@{}:{}/{}",
+            url.scheme(),
+            url.username(),
+            url.password().unwrap_or(""),
+            url.host_str().ok_or(anyhow!("Missing host"))?,
+            url.port().ok_or(anyhow!("Missing port"))?,
+            db
+        );
+        redis_json.extend(dump_keys(url, &keys_to_dump)?);
+    }
+
+    Ok(serde_json::to_value(redis_json)?)
+}
+
+pub fn dump_keys(
+    url: String,
+    keys_to_dump: &Option<Vec<String>>,
+) -> Result<HashMap<String, RedisValue>, anyhow::Error> {
     let mut redis = HashMap::<String, RedisValue>::new();
-    let mut conn = redis::Client::open(uri)?.get_connection()?;
+    let mut conn = redis::Client::open(url)?.get_connection()?;
     let keys = conn.scan::<String>()?.collect::<Vec<_>>();
 
     for key in keys {
@@ -62,16 +101,23 @@ pub fn dump_into_json(
         };
         redis.insert(key, value);
     }
-    Ok(serde_json::to_value(redis)?)
+    Ok(redis)
 }
 
 fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
     let args = RedisDumpCli::parse();
 
-    let uri = get_uri(args.uri);
+    let maybe_url = get_url(args.url);
+    let url = if let Err(err) = maybe_url {
+        // Print the error message and exit with error code 1
+        eprint!("{RED}");
+        return Err(err);
+    } else {
+        maybe_url?
+    };
 
-    let res = dump_into_json(uri, args.keys);
+    let res = dump_into_json(url, args.db, args.keys);
     if let Err(err) = res {
         // Print the error message and exit with error code 1
         eprint!("{RED}");
