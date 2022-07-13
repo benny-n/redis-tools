@@ -2,8 +2,9 @@ use anyhow::{anyhow, Result};
 use clap::Parser;
 use dotenv::dotenv;
 use redis::{self, Commands};
-use redis_tools::{cli::RedisDumpCli, common::ping, consts::*};
+use redis_tools::{cli::RedisDumpCli, common::get_uri, consts::RED};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize)]
@@ -17,14 +18,24 @@ pub enum RedisValue {
     Nil,
 }
 
-pub fn dump_into_json(uri: String) -> Result<()> {
+pub fn dump_into_json(
+    uri: String,
+    keys_to_dump: Option<Vec<String>>,
+) -> Result<JsonValue, anyhow::Error> {
     let mut redis = HashMap::<String, RedisValue>::new();
     let mut conn = redis::Client::open(uri)?.get_connection()?;
     let keys = conn.scan::<String>()?.collect::<Vec<_>>();
 
     for key in keys {
-        let output: String = redis::cmd("TYPE").arg(key.clone()).query(&mut conn)?;
-        let value = match output.as_str() {
+        let key_type: String = redis::cmd("TYPE").arg(key.clone()).query(&mut conn)?;
+        // If the user specified which keys to dump, and this key is not in the list, skip it.
+        if let Some(ref key_types) = keys_to_dump {
+            if !key_types.contains(&key_type) {
+                continue;
+            }
+        }
+
+        let value = match key_type.as_str() {
             "string" => {
                 let value: String = conn.get(key.clone())?;
                 RedisValue::String(value)
@@ -51,30 +62,23 @@ pub fn dump_into_json(uri: String) -> Result<()> {
         };
         redis.insert(key, value);
     }
-    println!("{}", serde_json::to_string_pretty(&redis)?);
-    Ok(())
+    Ok(serde_json::to_value(redis)?)
 }
 
 fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
     let args = RedisDumpCli::parse();
 
-    let uri = if let Some(uri) = args.uri {
-        uri
-    } else if let Some(uri) = std::env::var(REDIS_URI_ENV_VAR_KEY).ok() {
-        uri
-    } else {
-        REDIS_DEFAULT_URI.to_string()
-    };
+    let uri = get_uri(args.uri);
 
-    let res = if args.ping {
-        ping(uri)
-    } else {
-        dump_into_json(uri)
-    };
+    let res = dump_into_json(uri, args.keys);
     if let Err(err) = res {
+        // Print the error message and exit with error code 1
         eprint!("{RED}");
-        return Err(err);
+        Err(err)
+    } else {
+        // Print the JSON output of the Redis database to stdout (or to a file if output is redirected)
+        println!("{}", serde_json::to_string_pretty(&res.ok())?);
+        Ok(())
     }
-    return Ok(());
 }
