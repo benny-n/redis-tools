@@ -1,11 +1,11 @@
 use anyhow::{anyhow, Result};
-use clap::{IntoApp, Parser};
+use clap::Parser;
 use dotenv::dotenv;
 use redis::{self, Commands};
 use redis_tools::{
     cli::RedisDumpCli,
-    common::{get_database_from_url, get_url},
-    consts::{RED, REDIS_DEFAULT_URL},
+    common::{get_database_from_url, get_non_empty_db_indices, get_url},
+    consts::RED,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -25,7 +25,7 @@ pub enum RedisValue {
 
 pub fn dump_into_json(
     url: Url,
-    db: Option<u8>,
+    db: Option<u32>,
     keys_to_dump: Option<Vec<String>>,
 ) -> Result<JsonValue, anyhow::Error> {
     let mut redis_json = HashMap::<String, RedisValue>::new();
@@ -36,8 +36,8 @@ pub fn dump_into_json(
         // If a db was not explicitly specified in an argument, use the one from the url.
         vec![db_from_url]
     } else {
-        // If a db was not specified at all, try to dump from all the default dbs (0..=15).
-        Vec::from_iter(0..=15)
+        // If a db was not specified at all, use all the DBs with at least 1 key.
+        get_non_empty_db_indices(&url)?
     };
 
     for db in dbs {
@@ -47,8 +47,8 @@ pub fn dump_into_json(
             url.scheme(),
             url.username(),
             url.password().unwrap_or(""),
-            url.host_str().ok_or(anyhow!("Missing host"))?,
-            url.port().ok_or(anyhow!("Missing port"))?,
+            url.host_str().ok_or_else(|| anyhow!("Missing host"))?,
+            url.port().ok_or_else(|| anyhow!("Missing port"))?,
             db
         );
         redis_json.extend(dump_keys(url, &keys_to_dump)?);
@@ -127,31 +127,4 @@ fn main() -> Result<(), anyhow::Error> {
         println!("{}", serde_json::to_string_pretty(&res.ok())?);
         Ok(())
     }
-}
-
-#[test]
-fn test_redis_info_keyspace_cmd() {
-    let mut redis = HashMap::<String, RedisValue>::new();
-    let mut conn = redis::Client::open(REDIS_DEFAULT_URL)
-        .unwrap()
-        .get_connection()
-        .unwrap();
-    let result: String = redis::cmd("INFO").arg("keyspace").query(&mut conn).unwrap();
-    // Example of output:
-    // # Keyspace
-    // db0:keys=4,expires=0,avg_ttl=0
-    // db1:keys=1,expires=0,avg_ttl=0
-
-    // The next code parses the output and creates a vector of the db indices.
-
-    let mut lines = result.lines();
-    let mut db_indices: Vec<u32> = Vec::new();
-    while let Some(line) = lines.next() {
-        if line.starts_with("db") {
-            let db_index = line.split(':').nth(0).unwrap().strip_prefix("db").unwrap();
-            db_indices.push(db_index.parse::<u32>().unwrap());
-        }
-    }
-
-    println!("{:?}", db_indices);
 }

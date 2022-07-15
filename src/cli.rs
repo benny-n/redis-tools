@@ -1,5 +1,3 @@
-use std::ops::RangeInclusive;
-
 use clap::Parser;
 use url::Url;
 
@@ -23,8 +21,8 @@ pub struct RedisDumpCli {
     #[clap(short = 'u', long = "url", value_parser = url::Url::parse)]
     pub url: Option<Url>,
     /// The database to dump
-    #[clap(short = 'd', long = "database", value_parser = db_idx_in_range)]
-    pub db: Option<u8>,
+    #[clap(short = 'd', long = "database", value_parser = is_number)]
+    pub db: Option<u32>,
     /// The key types to dump (if not specified, all keys will be dumped)
     #[clap(name = "TYPES", short = 'k', long = "key-types", value_parser = key_type_exists, min_values = 1)]
     pub key_types: Option<Vec<String>>,
@@ -40,21 +38,9 @@ pub struct RedisRestoreCli {
     pub ping: bool,
 }
 
-const DB_IDX_RANGE: RangeInclusive<usize> = 0..=15;
-
-fn db_idx_in_range(s: &str) -> Result<u8, String> {
-    let db_idx: usize = s
-        .parse()
-        .map_err(|_| format!("`{}` isn't a valid Redis DB index", s))?;
-    if DB_IDX_RANGE.contains(&db_idx) {
-        Ok(db_idx as u8)
-    } else {
-        Err(format!(
-            "Redis DB index out of range {}-{}",
-            DB_IDX_RANGE.start(),
-            DB_IDX_RANGE.end()
-        ))
-    }
+fn is_number(s: &str) -> Result<u32, String> {
+    s.parse::<u32>()
+        .map_err(|_| format!("`{}` isn't a valid Redis DB name", s))
 }
 
 fn key_type_exists(s: &str) -> Result<String, String> {
@@ -75,27 +61,20 @@ mod tests {
     use clap::IntoApp;
 
     #[test]
-    fn redis_dump_cli_test() {
-        let res = RedisDumpCli::command().try_get_matches_from(&[
-            "redis-dump",
-            "--url",
-            "redis://localhost:6379",
-            "--database",
-            "0",
-            "--keys",
-            "foo",
-            "bar",
-        ]);
-        println!("{:#?}", res);
-        // let cli = RedisDumpCli::parse_from(&["redis-dump", "--url", "a"]);
-        // assert_eq!(cli.url.unwrap().as_str(), "redis://localhost:6379");
-        // assert_eq!(cli.db, None);
-        // assert_eq!(cli.keys, None);
-        // let arg_vec = vec!["my_prog", "some", "args", "to", "parse"];
+    fn redis_dump_cli_errors_test() {
+        let res = RedisDumpCli::command().try_get_matches_from(&["redis-dump", "--url", "a"]);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(matches!(err.kind, clap::ErrorKind::ValueValidation));
 
-        // let _matches = clap::App::new("myprog")
-        //     // Args and options go here...
-        //     .try_get_matches_from(arg_vec)
-        //     .unwrap_or_else(|e| e.exit());
+        let res = RedisDumpCli::command().try_get_matches_from(&["redis-dump", "--database", "a"]);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(matches!(err.kind, clap::ErrorKind::ValueValidation));
+
+        let res = RedisDumpCli::command().try_get_matches_from(&["redis-dump", "--key-types", "a"]);
+        assert!(res.is_err());
+        let err = res.unwrap_err();
+        assert!(matches!(err.kind, clap::ErrorKind::ValueValidation));
     }
 }
