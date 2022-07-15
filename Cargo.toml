@@ -5,13 +5,20 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "redis-dump"
+path = "src/redis_dump/main.rs"
+
+[[bin]]
+name = "redis-restore"
+path = "src/redis_restore/main.rs"
+
 [dependencies]
 anyhow = "1.0.58"
 clap = { version = "3.2.10", features = ["derive"] }
 dotenv = "0.15.0"
 futures = "0.3.21"
-redis = { version = "0.21.5", features = ["tokio", "tokio-comp"] }
+redis = "0.21.5" 
 serde = { version = "1.0.139", features = ["derive"] }
 serde_json = "1.0.82"
-tokio = { version = "1.19.2", features = ["full"] }
 url = "2.2.2"

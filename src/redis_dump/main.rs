@@ -1,9 +1,11 @@
+mod cli;
+
 use anyhow::{anyhow, Result};
 use clap::Parser;
+use cli::RedisDumpCli;
 use dotenv::dotenv;
 use redis::{self, Commands};
 use redis_tools::{
-    cli::RedisDumpCli,
     common::{get_database_from_url, get_non_empty_db_indices, get_url},
     consts::RED,
 };
@@ -20,7 +22,6 @@ pub enum RedisValue {
     List(Vec<String>),
     Set(Vec<String>),
     ZSet(Vec<(String, f32)>),
-    Nil,
 }
 
 pub fn dump_into_json(
@@ -107,7 +108,6 @@ pub fn dump_keys(
 fn main() -> Result<(), anyhow::Error> {
     dotenv().ok();
     let args = RedisDumpCli::parse();
-
     let maybe_url = get_url(args.url);
     let url = if let Err(err) = maybe_url {
         // Print the error message and exit

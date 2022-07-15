@@ -1,7 +1,9 @@
+mod cli;
+
 use clap::Parser;
+use cli::RedisRestoreCli;
 use dotenv::dotenv;
 use redis::{self, RedisError};
-use redis_tools::cli::RedisRestoreCli;
 
 #[allow(unused)]
 pub fn restore_from_json(_uri: String) -> Result<(), RedisError> {
