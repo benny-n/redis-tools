@@ -80,8 +80,8 @@ impl RedisDump {
         let mut entries = HashMap::<String, RedisValue>::new();
         let keys = self.conn.scan::<String>()?.collect::<Vec<_>>();
 
-        for key in keys {
-            let key_type: String = redis::cmd("TYPE").arg(key.clone()).query(&mut self.conn)?;
+        for key in keys.iter() {
+            let key_type: String = redis::cmd("TYPE").arg(key).query(&mut self.conn)?;
             // If the user specified which keys to dump, and this key is not in the list, skip it.
             if let DumpFilter::Keys(ref key_types) = self.filter {
                 if !key_types.contains(&key_type) {
@@ -91,31 +91,30 @@ impl RedisDump {
 
             let value = match key_type.as_str() {
                 "string" => {
-                    let value: String = self.conn.get(key.clone())?;
+                    let value: String = self.conn.get(key)?;
                     RedisValue::String(value)
                 }
                 "list" => {
-                    let value: Vec<String> = self.conn.lrange(key.clone(), 0, -1)?;
+                    let value: Vec<String> = self.conn.lrange(key, 0, -1)?;
                     RedisValue::List(value)
                 }
                 "set" => {
-                    let value: HashSet<String> = self.conn.smembers(key.clone())?;
+                    let value: HashSet<String> = self.conn.smembers(key)?;
                     RedisValue::Set(value)
                 }
                 "hash" => {
-                    let value: HashMap<String, String> = self.conn.hgetall(key.clone())?;
+                    let value: HashMap<String, String> = self.conn.hgetall(key)?;
                     RedisValue::Hash(value)
                 }
                 "zset" => {
-                    let value: Vec<(String, f32)> =
-                        self.conn.zrange_withscores(key.clone(), 0, -1)?;
+                    let value: Vec<(String, f32)> = self.conn.zrange_withscores(key, 0, -1)?;
                     RedisValue::ZSet(value)
                 }
                 _ => {
                     return Err(anyhow!("{}: Unsupported type", key));
                 }
             };
-            entries.insert(key, value);
+            entries.insert(key.to_string(), value);
         }
         Ok(entries)
     }
