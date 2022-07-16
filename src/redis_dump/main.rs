@@ -1,130 +1,68 @@
 mod cli;
 
-use anyhow::{anyhow, Result};
-use clap::Parser;
+use anyhow::Result;
+use clap::{IntoApp, Parser};
 use cli::RedisDumpCli;
 use dotenv::dotenv;
-use redis::{self, Commands};
 use redis_tools::{
-    common::{get_database_from_url, get_non_empty_db_indices, get_url},
-    consts::RED,
+    common::{get_all_non_empty_dbs, get_url},
+    redis_dump::{DumpFilter, RedisDump, RedisValue},
 };
-use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
+use serde_json::Value as Json;
 use std::collections::HashMap;
-use url::Url;
 
-#[derive(Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum RedisValue {
-    String(String),
-    Hash(HashMap<String, String>),
-    List(Vec<String>),
-    Set(Vec<String>),
-    ZSet(Vec<(String, f32)>),
+fn dump_json(mut rd: RedisDump) -> Result<Json, anyhow::Error> {
+    Ok(serde_json::to_value(rd.entries()?)?)
 }
 
-pub fn dump_into_json(
-    url: Url,
-    db: Option<u32>,
-    keys_to_dump: Option<Vec<String>>,
-) -> Result<JsonValue, anyhow::Error> {
-    let mut redis_json = HashMap::<String, RedisValue>::new();
-    let dbs = if let Some(db_from_arg) = db {
-        // Prefer the db from the argument over the one from the url.
-        vec![db_from_arg]
-    } else if let Some(db_from_url) = get_database_from_url(&url) {
-        // If a db was not explicitly specified in an argument, use the one from the url.
-        vec![db_from_url]
-    } else {
-        // If a db was not specified at all, use all the DBs with at least 1 key.
-        get_non_empty_db_indices(&url)?
-    };
-
+fn dump_all_json(mut rd: RedisDump) -> Result<Json, anyhow::Error> {
+    let mut redis_obj = HashMap::<String, RedisValue>::new();
+    let dbs = get_all_non_empty_dbs(redis::cmd("INFO").arg("keyspace").query(rd.conn_mut())?);
     for db in dbs {
-        eprintln!("Dumping database: {}", db);
-        let url = format!(
-            "{}://{}:{}@{}:{}/{}",
-            url.scheme(),
-            url.username(),
-            url.password().unwrap_or(""),
-            url.host_str().ok_or_else(|| anyhow!("Missing host"))?,
-            url.port().ok_or_else(|| anyhow!("Missing port"))?,
-            db
-        );
-        redis_json.extend(dump_keys(url, &keys_to_dump)?);
+        rd.select_db(db)?;
+        redis_obj.extend(rd.entries()?);
     }
 
-    Ok(serde_json::to_value(redis_json)?)
+    Ok(serde_json::to_value(redis_obj)?)
 }
 
-pub fn dump_keys(
-    url: String,
-    keys_to_dump: &Option<Vec<String>>,
-) -> Result<HashMap<String, RedisValue>, anyhow::Error> {
-    let mut redis = HashMap::<String, RedisValue>::new();
-    let mut conn = redis::Client::open(url)?.get_connection()?;
-    let keys = conn.scan::<String>()?.collect::<Vec<_>>();
+fn cli_main(args: RedisDumpCli) -> Result<Json, anyhow::Error> {
+    let url = get_url(args.url)?;
 
-    for key in keys {
-        let key_type: String = redis::cmd("TYPE").arg(key.clone()).query(&mut conn)?;
-        // If the user specified which keys to dump, and this key is not in the list, skip it.
-        if let Some(ref key_types) = keys_to_dump {
-            if !key_types.contains(&key_type) {
-                continue;
-            }
-        }
+    // Build the RedisDump object.
+    let mut rd = RedisDump::new(url)?.with_filter(if let Some(keys) = args.key_types {
+        DumpFilter::Keys(keys)
+    } else {
+        DumpFilter::None
+    });
 
-        let value = match key_type.as_str() {
-            "string" => {
-                let value: String = conn.get(key.clone())?;
-                RedisValue::String(value)
-            }
-            "list" => {
-                let value: Vec<String> = conn.lrange(key.clone(), 0, -1)?;
-                RedisValue::List(value)
-            }
-            "set" => {
-                let value: Vec<String> = conn.smembers(key.clone())?;
-                RedisValue::Set(value)
-            }
-            "hash" => {
-                let value: HashMap<String, String> = conn.hgetall(key.clone())?;
-                RedisValue::Hash(value)
-            }
-            "zset" => {
-                let value: Vec<(String, f32)> = conn.zrange_withscores(key.clone(), 0, -1)?;
-                RedisValue::ZSet(value)
-            }
-            _ => {
-                return Err(anyhow!("{}: Unsupported type", key));
-            }
-        };
-        redis.insert(key, value);
+    // Select the database if it was specified.
+    if let Some(cli::DbOption::Db(db)) = args.db {
+        rd.select_db(db)?;
+        dump_json(rd)
+    // If `all` was specified, dump all databases.
+    } else if let Some(cli::DbOption::All) = args.db {
+        dump_all_json(rd)
+    // If no database option was specified, the database will be selected by the URL.
+    } else {
+        dump_json(rd)
     }
-    Ok(redis)
 }
 
 fn main() -> Result<(), anyhow::Error> {
+    // Load .env file if it exists.
     dotenv().ok();
-    let args = RedisDumpCli::parse();
-    let maybe_url = get_url(args.url);
-    let url = if let Err(err) = maybe_url {
-        // Print the error message and exit
-        eprint!("{RED}");
-        return Err(err);
-    } else {
-        maybe_url?
-    };
 
-    let res = dump_into_json(url, args.db, args.key_types);
-    if let Err(err) = res {
-        // Print the error message and exit
-        eprint!("{RED}");
-        Err(err)
-    } else {
-        // Print the JSON output of the Redis database to stdout (or to a file if output is redirected)
-        println!("{}", serde_json::to_string_pretty(&res.ok())?);
-        Ok(())
+    // Parse command line arguments, and run
+    let args = RedisDumpCli::parse();
+    let json = cli_main(args);
+    if let Err(err) = json {
+        clap::Error::raw(clap::ErrorKind::Io, err.to_string())
+            .format(&mut RedisDumpCli::into_app())
+            .exit(); // We explicitly exit here to apply the error formatting.
     }
+
+    // Print the JSON to stdout.
+    println!("{}", serde_json::to_string_pretty(&json?)?);
+    Ok(())
 }
