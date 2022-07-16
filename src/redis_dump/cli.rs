@@ -7,15 +7,22 @@ use redis_tools::consts::REDIS_KEY_TYPE;
 const REDIS_DUMP_EXAMPLES: &str = 
 "\x1b[33mEXAMPLES\x1b[0m:
     \x1b[90m# Dump all databases into json\x1b[0m
-    $ redis-dump \x1b[91m>\x1b[0m dump.json
+    $ redis-dump \x1b[32m-d\x1b[0m all \x1b[91m>\x1b[0m dump.json
 
     \x1b[90m# Dump db 0 into json\x1b[0m
-    $ redis-dump \x1b[32m-u\x1b[0m redis://localhost:6379/0 \x1b[91m>\x1b[0m dump.json
+    $ redis-dump \x1b[32m-u\x1b[0m redis://localhost:6379/ \x1b[32m-d\x1b[0m 0 \x1b[91m>\x1b[0m dump.json
     
     \x1b[90m# Dump only string, list or hash keys of db 0 into json\x1b[0m
     $ redis-dump \x1b[32m-u\x1b[0m redis://localhost:6379/ \x1b[32m-d\x1b[0m 0 \x1b[32m--key-types\x1b[0m string list hash \x1b[91m>\x1b[0m dump.json
 
 ";
+
+#[derive(Clone, Debug)]
+pub enum DbOption {
+    Db(u32),
+    All,
+}
+
 /// A tool for dumping Redis databases into a file
 #[derive(Parser, Debug)]
 #[clap(name = "redis-dump")]
@@ -25,19 +32,22 @@ pub struct RedisDumpCli {
     /// The redis server URL
     #[clap(short = 'u', long = "url", value_parser = url::Url::parse)]
     pub url: Option<Url>,
-    /// The database to dump
-    #[clap(short = 'd', long = "database", value_parser = is_number)]
-    pub db: Option<u32>,
+    /// The database to dump [0-15, or `all` for all databases]
+    #[clap(name = "DB | all", short = 'd', long = "database", value_parser = is_number_or_all)]
+    pub db: Option<DbOption>,
     /// The key types to dump (if not specified, all keys will be dumped)
     #[clap(name = "TYPES", short = 'k', long = "key-types", value_parser = key_type_exists, min_values = 1)]
     pub key_types: Option<Vec<String>>,
-
-    pub private: bool,
 }
 
-fn is_number(s: &str) -> Result<u32, String> {
-    s.parse::<u32>()
-        .map_err(|_| format!("`{}` isn't a valid Redis DB name", s))
+fn is_number_or_all(s: &str) -> Result<DbOption, String> {
+    if s == "all" {
+        Ok(DbOption::All)
+    } else {
+        s.parse::<u32>()
+            .map(DbOption::Db)
+            .map_err(|_| format!("`{}` is not a valid option.\n\t valid options are: 0..15 | all", s))
+    } 
 }
 
 fn key_type_exists(s: &str) -> Result<String, String> {
