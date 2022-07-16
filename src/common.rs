@@ -25,26 +25,27 @@ pub fn get_database_from_url(url: &Url) -> Option<u32> {
 }
 
 /// Returns the indices of DBs with at least 1 key.
-pub fn get_non_empty_db_indices(url: &Url) -> Result<Vec<u32>> {
-    let mut conn = redis::Client::open(url.to_string())?.get_connection()?;
-    let result: String = redis::cmd("INFO").arg("keyspace").query(&mut conn)?;
+pub fn get_all_non_empty_dbs(info_cmd_output: String) -> Vec<u32> {
     // Example of output for a redis-cli INFO keyspace command:
     // # Keyspace
     // db0:keys=4,expires=0,avg_ttl=0
     // db1:keys=1,expires=0,avg_ttl=0
     let mut db_indices = Vec::new();
-    for line in result.lines() {
+    for line in info_cmd_output.lines() {
         if line.starts_with("db") {
             let db_index = line
                 .split(':')
                 .next()
-                .unwrap() // Safe because we know the line cotains ':'
+                // SAFE UNWRAP: Always contains a ':'
+                .unwrap()
                 .strip_prefix("db")
-                .unwrap(); // Safe because we know the line starts with "db"
-            db_indices.push(db_index.parse::<u32>()?);
+                // SAFE UNWRAP: Due to if statement, line must start with "db"
+                .unwrap();
+            // SAFE UNWRAP: What follows 'db' is always a number
+            db_indices.push(db_index.parse::<u32>().unwrap());
         }
     }
-    Ok(db_indices)
+    db_indices
 }
 
 #[test]
