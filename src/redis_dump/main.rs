@@ -28,13 +28,18 @@ fn dump_all_json(mut rd: RedisDump) -> Result<Json, anyhow::Error> {
 
 fn cli_main(args: RedisDumpCli) -> Result<Json, anyhow::Error> {
     let url = get_url(args.url)?;
-
-    // Build the RedisDump object.
-    let mut rd = RedisDump::new(url)?.with_filter(if let Some(keys) = args.key_types {
+    let filter = if let Some(keys) = args.key_types {
         DumpFilter::Keys(keys)
     } else {
         DumpFilter::None
-    });
+    };
+
+    // Build the RedisDump object and connect to the server.
+    let mut rd = RedisDump::build()
+        .with_url(url)
+        .with_filter(filter)
+        .with_metadata(!args.no_metadata)
+        .connect()?;
 
     // Select the database if it was specified.
     if let Some(cli::DbOption::Db(db)) = args.db {
@@ -55,6 +60,7 @@ fn main() -> Result<(), anyhow::Error> {
 
     // Parse command line arguments, and run
     let args = RedisDumpCli::parse();
+    let is_pretty = args.pretty;
     let json = cli_main(args);
     if let Err(err) = json {
         clap::Error::raw(clap::ErrorKind::Io, err.to_string())
@@ -63,6 +69,10 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     // Print the JSON to stdout.
-    println!("{}", serde_json::to_string_pretty(&json?)?);
+    if is_pretty {
+        println!("{}", serde_json::to_string_pretty(&json?)?);
+    } else {
+        println!("{}", serde_json::to_string(&json?)?);
+    }
     Ok(())
 }

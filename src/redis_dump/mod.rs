@@ -5,7 +5,7 @@ use redis::Commands;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::common::get_database_from_url;
+use crate::{common::get_database_from_url, consts::REDIS_DEFAULT_URL};
 
 #[derive(Default)]
 pub enum DumpFilter {
@@ -22,39 +22,83 @@ pub enum RedisValue {
     List(Vec<String>),
     Set(HashSet<String>),
     ZSet(Vec<(String, f32)>),
+    Meta(RedisMeta),
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RedisMeta {
+    db: u32,
+    key: String,
+    r#type: String,
+    ttl: i64,
+    data: Box<RedisValue>,
 }
 pub struct RedisDump {
     conn: redis::Connection,
     db: u32,
     filter: DumpFilter,
+    metadata: bool,
 }
 
-impl RedisDump {
-    pub fn new(url: Url) -> Result<Self, anyhow::Error> {
-        let db = if let Some(db) = get_database_from_url(&url) {
-            db
-        } else {
-            0
-        };
+pub struct RedisDumpBuilder {
+    url: Url,
+    filter: DumpFilter,
+    metadata: bool,
+}
 
-        let conn = redis::Client::open(url)?.get_connection()?;
-        Ok(Self {
-            conn,
-            db,
+impl RedisDumpBuilder {
+    pub fn new() -> Self {
+        Self {
+            // SAFE UNWRAP: The default URL is a valid URL.
+            url: Url::parse(REDIS_DEFAULT_URL).unwrap(),
             filter: DumpFilter::None,
-        })
+            metadata: true,
+        }
     }
-    pub fn with_db(mut self, db: u32) -> Self {
-        self.db = db;
+    pub fn with_url(mut self, url: Url) -> Self {
+        self.url = url;
         self
     }
     pub fn with_filter(mut self, filter: DumpFilter) -> Self {
         self.filter = filter;
         self
     }
+    pub fn with_metadata(mut self, metadata: bool) -> Self {
+        self.metadata = metadata;
+        self
+    }
+    pub fn connect(self) -> anyhow::Result<RedisDump> {
+        let conn = redis::Client::open(self.url.as_str())?.get_connection()?;
+        let db = if let Some(db) = get_database_from_url(&self.url) {
+            db
+        } else {
+            0
+        };
+        Ok(RedisDump {
+            conn,
+            db,
+            filter: self.filter,
+            metadata: self.metadata,
+        })
+    }
+}
+
+impl RedisDump {
+    /// Build a new RedisDump object.
+    ///
+    #[must_use]
+    pub fn build() -> RedisDumpBuilder {
+        RedisDumpBuilder::new()
+    }
+
+    /// Get the connection to the Redis server.
+    ///
     pub fn conn(&self) -> &redis::Connection {
         &self.conn
     }
+
+    /// Get (mutably) the connection to the Redis server.
+    ///
     pub fn conn_mut(&mut self) -> &mut redis::Connection {
         &mut self.conn
     }
@@ -114,7 +158,20 @@ impl RedisDump {
                     return Err(anyhow!("{}: Unsupported type", key));
                 }
             };
-            entries.insert(key.to_string(), value);
+            entries.insert(
+                key.to_string(),
+                if self.metadata {
+                    RedisValue::Meta(RedisMeta {
+                        db: self.db,
+                        key: key.to_string(),
+                        r#type: key_type,
+                        ttl: self.conn.ttl(key)?,
+                        data: Box::new(value),
+                    })
+                } else {
+                    value
+                },
+            );
         }
         Ok(entries)
     }
