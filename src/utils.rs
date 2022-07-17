@@ -1,18 +1,4 @@
-use anyhow::Result;
 use url::Url;
-
-use crate::consts::{REDIS_DEFAULT_URL, REDIS_URL_ENV_VAR_KEY};
-
-pub fn get_url(maybe_url: Option<Url>) -> Result<Url, anyhow::Error> {
-    let url = if let Some(url) = maybe_url {
-        Ok(url)
-    } else if let Ok(url) = std::env::var(REDIS_URL_ENV_VAR_KEY) {
-        Url::parse(url.as_str())
-    } else {
-        Url::parse(REDIS_DEFAULT_URL)
-    }?;
-    Ok(url)
-}
 
 pub fn get_database_from_url(url: &Url) -> Option<u32> {
     let db = url.path().split('/').collect::<Vec<&str>>();
@@ -36,13 +22,14 @@ pub fn get_all_non_empty_dbs(info_cmd_output: String) -> Vec<u32> {
             let db_index = line
                 .split(':')
                 .next()
-                // SAFE UNWRAP: Always contains a ':'
-                .unwrap()
-                .strip_prefix("db")
-                // SAFE UNWRAP: Due to if statement, line must start with "db"
-                .unwrap();
-            // SAFE UNWRAP: What follows 'db' is always a number
-            db_indices.push(db_index.parse::<u32>().unwrap());
+                .map(|s| s.strip_prefix("db"))
+                .flatten()
+                .unwrap(); // SAFE UNWRAP: Due to if statement, line must start with "db"
+            db_indices.push(
+                db_index
+                    .parse::<u32>() // For a valid redis-cli INFO keyspace output, db_index must be a valid u32.
+                    .expect("corrupted redis-cli INFO keyspace command"),
+            );
         }
     }
     db_indices

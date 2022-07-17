@@ -5,8 +5,8 @@ use clap::{IntoApp, Parser};
 use cli::RedisDumpCli;
 use dotenv::dotenv;
 use redis_tools::{
-    common::{get_all_non_empty_dbs, get_url},
     redis_dump::{DumpFilter, RedisDump, RedisValue},
+    utils::get_all_non_empty_dbs,
 };
 use serde_json::Value as Json;
 use std::collections::HashMap;
@@ -27,7 +27,6 @@ fn dump_all_json(mut rd: RedisDump) -> Result<Json, anyhow::Error> {
 }
 
 fn cli_main(args: RedisDumpCli) -> Result<Json, anyhow::Error> {
-    let url = get_url(args.url)?;
     let filter = if let Some(keys) = args.key_types {
         DumpFilter::Keys(keys)
     } else {
@@ -36,7 +35,7 @@ fn cli_main(args: RedisDumpCli) -> Result<Json, anyhow::Error> {
 
     // Build the RedisDump object and connect to the server.
     let mut rd = RedisDump::build()
-        .with_url(url)
+        .with_url(args.url)
         .with_filter(filter)
         .with_metadata(!args.no_metadata)
         .connect()?;

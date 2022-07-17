@@ -1,7 +1,7 @@
 use clap::Parser;
 use url::Url;
 
-use redis_tools::consts::REDIS_KEY_TYPE;
+use redis_tools::consts::{REDIS_KEY_TYPE, REDIS_DEFAULT_URL};
 
 
 const REDIS_DUMP_EXAMPLES: &str = 
@@ -34,11 +34,8 @@ pub struct RedisDumpCli {
     /// The URL should usually be in the form of `redis://[:password]@host:port/db` or `redis://host:port/db`.
     /// The `db` part is optional, 0 being the default.
     /// Prefer specifying the database using the `-d` option.
-    /// 
-    /// NOTE: If the URL is not specified, redis-dump will try to use the `REDIS_URL` environment variable.
-    /// If the environment variable is not set, redis-dump will use the default URL - redis://localhost:6379.
-    #[clap(short = 'u', long = "url", value_parser = url::Url::parse, display_order = 0)]
-    pub url: Option<Url>,
+    #[clap(short = 'u', long = "url", env = "REDIS_URL", default_value = REDIS_DEFAULT_URL, value_parser = url::Url::parse, display_order = 0)]
+    pub url: Url,
     /// The database to dump
     /// 
     /// Redis database name (usually 0-15), or `all` for all databases.

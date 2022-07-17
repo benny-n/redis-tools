@@ -5,7 +5,7 @@ use redis::Commands;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{common::get_database_from_url, consts::REDIS_DEFAULT_URL};
+use crate::{consts::REDIS_DEFAULT_URL, utils::get_database_from_url};
 
 #[derive(Default)]
 pub enum DumpFilter {
