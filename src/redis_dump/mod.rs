@@ -28,7 +28,6 @@ pub enum RedisValue {
 #[derive(Serialize, Deserialize)]
 pub struct RedisMeta {
     db: u32,
-    key: String,
     r#type: String,
     ttl: i64,
     data: Box<RedisValue>,
@@ -163,7 +162,6 @@ impl RedisDump {
                 if self.metadata {
                     RedisValue::Meta(RedisMeta {
                         db: self.db,
-                        key: key.to_string(),
                         r#type: key_type,
                         ttl: self.conn.ttl(key)?,
                         data: Box::new(value),
