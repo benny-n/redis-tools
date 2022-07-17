@@ -30,14 +30,46 @@ pub enum DbOption {
 #[clap(after_help = REDIS_DUMP_EXAMPLES)]
 pub struct RedisDumpCli {
     /// The redis server URL
-    #[clap(short = 'u', long = "url", value_parser = url::Url::parse)]
+    /// 
+    /// The URL should usually be in the form of `redis://[:password]@host:port/db` or `redis://host:port/db`.
+    /// The `db` part is optional, 0 being the default.
+    /// Prefer specifying the database using the `-d` option.
+    /// 
+    /// NOTE: If the URL is not specified, redis-dump will try to use the `REDIS_URL` environment variable.
+    /// If the environment variable is not set, redis-dump will use the default URL - redis://localhost:6379.
+    #[clap(short = 'u', long = "url", value_parser = url::Url::parse, display_order = 0)]
     pub url: Option<Url>,
-    /// The database to dump [0-15, or `all` for all databases]
-    #[clap(name = "DB | all", short = 'd', long = "database", value_parser = is_number_or_all)]
+    /// The database to dump
+    /// 
+    /// Redis database name (usually 0-15), or `all` for all databases.
+    /// If not specified, the database will be selected by the URL.
+    /// If the URL does not specify a database, the default database (0) will be used.
+    #[clap(name = "DB | all", short = 'd', long = "database", value_parser = is_number_or_all, display_order = 1)]
     pub db: Option<DbOption>,
-    /// The key types to dump (if not specified, all keys will be dumped)
-    #[clap(name = "TYPES", short = 'k', long = "key-types", value_parser = key_type_exists, min_values = 1)]
+    /// The key types to dump
+    /// 
+    /// Available key types: string, list, set, zset, hash.
+    /// If not specified, all key types will be dumped.
+    #[clap(name = "TYPES", short = 'k', long = "key-types", value_parser = key_type_exists, min_values = 1, display_order = 2)]
     pub key_types: Option<Vec<String>>,
+    /// Whether to include metadata (per-key) in the dump
+    /// 
+    /// If set, dump will NOT include metadata per key.
+    /// The metadata consists of the key name, type, and ttl (time-to-live).
+    #[clap(long = "no-metadata", value_parser, display_order = 3)]
+    pub no_metadata: bool,
+    /// Serialize the output as a pretty-printed JSON
+    /// 
+    /// NOTE: using this option will most likely increase the size of the output file.
+    #[clap(short = 'p', long = "pretty", value_parser, display_order = 4)]
+    pub pretty: bool,
+
+    /// Prints this message.
+    #[clap(short = 'h', long = "help", action = clap::ArgAction::Help,)]
+    _help: Option<bool>,
+    /// Prints the version.
+    #[clap(short = 'v', long = "version", action = clap::ArgAction::Version)]
+    _version: Option<bool>,
 }
 
 fn is_number_or_all(s: &str) -> Result<DbOption, String> {
@@ -46,7 +78,7 @@ fn is_number_or_all(s: &str) -> Result<DbOption, String> {
     } else {
         s.parse::<u32>()
             .map(DbOption::Db)
-            .map_err(|_| format!("`{}` is not a valid option.\n\t valid options are: 0..15 | all", s))
+            .map_err(|_| format!("valid values are: <integer> | all"))
     } 
 }
 
