@@ -5,6 +5,7 @@ use clap::{IntoApp, Parser};
 use cli::RedisDumpCli;
 use dotenv::dotenv;
 use redis_tools::{
+    cli::{self as cli_common},
     redis_dump::{DumpFilter, RedisDump, RedisValue},
     utils::get_all_non_empty_dbs,
 };
@@ -41,11 +42,11 @@ fn cli_main(args: RedisDumpCli) -> Result<Json, anyhow::Error> {
         .connect()?;
 
     // Select the database if it was specified.
-    if let Some(cli::DbOption::Db(db)) = args.db {
+    if let Some(cli_common::DbOption::Db(db)) = args.db {
         rd.select_db(db)?;
         dump_json(rd)
     // If `all` was specified, dump all databases.
-    } else if let Some(cli::DbOption::All) = args.db {
+    } else if let Some(cli_common::DbOption::All) = args.db {
         dump_all_json(rd)
     // If no database option was specified, the database will be selected by the URL.
     } else {

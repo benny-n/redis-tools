@@ -1,7 +1,7 @@
 use clap::Parser;
 use url::Url;
 
-use redis_tools::consts::{REDIS_KEY_TYPE, REDIS_DEFAULT_URL};
+use redis_tools::{consts::{REDIS_DEFAULT_URL, REDIS_URL_ENV_VAR_KEY}, cli::{DbOption, is_number_or_all, key_type_exists}};
 
 
 const REDIS_DUMP_EXAMPLES: &str = 
@@ -17,12 +17,6 @@ const REDIS_DUMP_EXAMPLES: &str =
 
 ";
 
-#[derive(Clone, Debug)]
-pub enum DbOption {
-    Db(u32),
-    All,
-}
-
 /// A tool for dumping Redis databases into a file
 #[derive(Parser, Debug)]
 #[clap(name = "redis-dump")]
@@ -34,7 +28,7 @@ pub struct RedisDumpCli {
     /// The URL should usually be in the form of `redis://[:password]@host:port/db` or `redis://host:port/db`.
     /// The `db` part is optional, 0 being the default.
     /// Prefer specifying the database using the `-d` option.
-    #[clap(short = 'u', long = "url", env = "REDIS_URL", default_value = REDIS_DEFAULT_URL, value_parser = url::Url::parse, display_order = 0)]
+    #[clap(short = 'u', long = "url", env = REDIS_URL_ENV_VAR_KEY, default_value = REDIS_DEFAULT_URL, value_parser = url::Url::parse, display_order = 0)]
     pub url: Url,
     /// The database to dump
     /// 
@@ -46,7 +40,7 @@ pub struct RedisDumpCli {
     /// The key types to dump
     /// 
     /// Available key types: string, list, set, zset, hash.
-    /// If not specified, all key types will be dumped.
+    /// If `all` is specified, all key types will be dumped.
     #[clap(name = "TYPES", short = 'k', long = "key-types", value_parser = key_type_exists, min_values = 1, display_order = 2)]
     pub key_types: Option<Vec<String>>,
     /// Whether to include metadata (per-key) in the dump
@@ -69,23 +63,6 @@ pub struct RedisDumpCli {
     _version: Option<bool>,
 }
 
-fn is_number_or_all(s: &str) -> Result<DbOption, String> {
-    if s == "all" {
-        Ok(DbOption::All)
-    } else {
-        s.parse::<u32>()
-            .map(DbOption::Db)
-            .map_err(|_| format!("valid values are: <integer> | all"))
-    } 
-}
-
-fn key_type_exists(s: &str) -> Result<String, String> {
-    REDIS_KEY_TYPE.contains(&s).then(|| s.to_string()).ok_or_else(||format!(
-        "Redis key type `{}` is not one of: {}",
-        s,
-        REDIS_KEY_TYPE.join(", ")
-    ))
-}
 
 #[cfg(test)]
 mod tests {

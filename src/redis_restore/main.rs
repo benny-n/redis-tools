@@ -3,16 +3,39 @@ mod cli;
 use clap::Parser;
 use cli::RedisRestoreCli;
 use dotenv::dotenv;
-use redis::{self, RedisError};
+use redis_tools::{redis_dump::RedisValue, utils::print_red_error};
+use std::io::Write;
 
-#[allow(unused)]
-pub fn restore_from_json(_uri: String) -> Result<(), RedisError> {
-    unimplemented!()
+use std::{
+    collections::HashMap,
+    io::{self, Read},
+};
+
+pub fn cli_main(args: RedisRestoreCli) -> Result<(), anyhow::Error> {
+    let mut buf = Vec::new();
+    if let Some(file) = args.file {
+        let mut file = std::fs::File::open(file)?;
+        file.read_to_end(&mut buf)?;
+    } else {
+        io::stdin().read_to_end(&mut buf)?;
+    }
+
+    let redis_map: HashMap<String, RedisValue> = serde_json::from_slice(&buf)?;
+    for (key, value) in redis_map {
+        println!("{}: {:#?}", key, value);
+    }
+    Ok(())
 }
 
-fn main() {
+fn main() -> Result<(), anyhow::Error> {
+    // Load .env file if it exists.
     dotenv().ok();
-    let uri = std::env::var("REDIS_URI").unwrap();
+
+    // Parse command line arguments, and run
     let args = RedisRestoreCli::parse();
-    unimplemented!("{}, {:?}", uri, args);
+    if let Err(err) = cli_main(args) {
+        writeln!(print_red_error()?.lock(), "{}", err)?;
+        std::process::exit(1);
+    }
+    Ok(())
 }

@@ -14,7 +14,7 @@ pub enum DumpFilter {
     Keys(Vec<String>),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum RedisValue {
     String(String),
@@ -25,7 +25,7 @@ pub enum RedisValue {
     Meta(RedisMeta),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RedisMeta {
     db: u32,
     r#type: String,
