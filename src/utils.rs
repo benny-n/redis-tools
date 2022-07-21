@@ -1,3 +1,5 @@
+use std::io::Write;
+use termcolor::{self, Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use url::Url;
 
 pub fn get_database_from_url(url: &Url) -> Option<u32> {
@@ -8,6 +10,16 @@ pub fn get_database_from_url(url: &Url) -> Option<u32> {
     }
 
     db.get(1).cloned().and_then(|s| s.parse::<u32>().ok())
+}
+
+pub fn print_red_error() -> Result<StandardStream, anyhow::Error> {
+    let stderr = StandardStream::stderr(ColorChoice::Auto);
+    let mut stderr_lock = stderr.lock();
+    stderr_lock.set_color(ColorSpec::new().set_bold(true).set_fg(Some(Color::Red)))?;
+    write!(stderr_lock, "error: ")?;
+    stderr_lock.set_color(&ColorSpec::new())?;
+    drop(stderr_lock);
+    Ok(stderr)
 }
 
 /// Returns the indices of DBs with at least 1 key.
