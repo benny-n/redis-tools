@@ -7,11 +7,11 @@ edition = "2021"
 
 [[bin]]
 name = "redis-dump"
-path = "src/redis_dump/main.rs"
+path = "src/bin/redis_dump/main.rs"
 
 [[bin]]
 name = "redis-restore"
-path = "src/redis_restore/main.rs"
+path = "src/bin/redis_restore/main.rs"
 
 [dependencies]
 anyhow = "1.0.58"

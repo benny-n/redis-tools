@@ -1,4 +1,9 @@
-use crate::consts::REDIS_KEY_TYPE;
+///
+/// Private CLI common functions.
+/// This module contains functions that are common to the CLI binaries.
+/// Should not be used directly.
+///
+use super::consts::REDIS_KEY_TYPE;
 
 #[derive(Clone, Debug)]
 pub enum DbOption {

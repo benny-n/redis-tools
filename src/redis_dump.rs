@@ -2,10 +2,12 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::anyhow;
 use redis::Commands;
-use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::{consts::REDIS_DEFAULT_URL, utils::get_database_from_url};
+use crate::{
+    __private::{consts::REDIS_DEFAULT_URL, utils::get_database_from_url},
+    types::{RedisMeta, RedisValue},
+};
 
 #[derive(Default)]
 pub enum DumpFilter {
@@ -14,24 +16,6 @@ pub enum DumpFilter {
     Keys(Vec<String>),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum RedisValue {
-    String(String),
-    Hash(HashMap<String, String>),
-    List(Vec<String>),
-    Set(HashSet<String>),
-    ZSet(Vec<(String, f32)>),
-    Meta(RedisMeta),
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RedisMeta {
-    db: u32,
-    r#type: String,
-    ttl: i64,
-    data: Box<RedisValue>,
-}
 pub struct RedisDump {
     conn: redis::Connection,
     db: u32,

@@ -1,16 +1,10 @@
+///
+/// Private utility functions.
+/// Should not be used directly.
+///
 use std::io::Write;
 use termcolor::{self, Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use url::Url;
-
-pub fn get_database_from_url(url: &Url) -> Option<u32> {
-    let db = url.path().split('/').collect::<Vec<&str>>();
-
-    if db.is_empty() {
-        return None;
-    }
-
-    db.get(1).cloned().and_then(|s| s.parse::<u32>().ok())
-}
 
 pub fn print_red_error() -> Result<StandardStream, anyhow::Error> {
     let stderr = StandardStream::stderr(ColorChoice::Auto);
@@ -20,6 +14,16 @@ pub fn print_red_error() -> Result<StandardStream, anyhow::Error> {
     stderr_lock.set_color(&ColorSpec::new())?;
     drop(stderr_lock);
     Ok(stderr)
+}
+
+pub fn get_database_from_url(url: &Url) -> Option<u32> {
+    let db = url.path().split('/').collect::<Vec<&str>>();
+
+    if db.is_empty() {
+        return None;
+    }
+
+    db.get(1).cloned().and_then(|s| s.parse::<u32>().ok())
 }
 
 /// Returns the indices of DBs with at least 1 key.
@@ -45,40 +49,4 @@ pub fn get_all_non_empty_dbs(info_cmd_output: String) -> Vec<u32> {
         }
     }
     db_indices
-}
-
-#[test]
-fn get_database_test() {
-    assert_eq!(
-        get_database_from_url(&url::Url::parse("redis://localhost:6379").unwrap()),
-        None
-    );
-    assert_eq!(
-        get_database_from_url(&url::Url::parse("redis://localhost:6379/0").unwrap()),
-        Some(0)
-    );
-    assert_eq!(
-        get_database_from_url(&url::Url::parse("redis://localhost:6379/0/").unwrap()),
-        Some(0)
-    );
-    assert_eq!(
-        get_database_from_url(&url::Url::parse("redis://localhost:6379/0/foo").unwrap()),
-        Some(0)
-    );
-    assert_eq!(
-        get_database_from_url(&url::Url::parse("redis://localhost:6379/1/foo/").unwrap()),
-        Some(1)
-    );
-    assert_eq!(
-        get_database_from_url(&url::Url::parse("redis://localhost:6379/0/foo/bar").unwrap()),
-        Some(0)
-    );
-    assert_eq!(
-        get_database_from_url(&url::Url::parse("redis://localhost:6379/1/foo/bar/").unwrap()),
-        Some(1)
-    );
-    assert_eq!(
-        get_database_from_url(&url::Url::parse("redis://localhost:6379/asd/foo/bar/").unwrap()),
-        None
-    );
 }

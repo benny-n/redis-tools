@@ -3,7 +3,9 @@ mod cli;
 use clap::Parser;
 use cli::RedisRestoreCli;
 use dotenv::dotenv;
-use redis_tools::{redis_dump::RedisValue, utils::print_red_error};
+use redis_tools::__private::utils::print_red_error;
+use redis_tools::redis_restore::RedisRestore;
+use redis_tools::types::RedisValue;
 use std::io::Write;
 
 use std::{
@@ -11,7 +13,7 @@ use std::{
     io::{self, Read},
 };
 
-pub fn cli_main(args: RedisRestoreCli) -> Result<(), anyhow::Error> {
+fn cli_main(args: RedisRestoreCli) -> Result<(), anyhow::Error> {
     let mut buf = Vec::new();
     if let Some(file) = args.file {
         let mut file = std::fs::File::open(file)?;
@@ -21,9 +23,14 @@ pub fn cli_main(args: RedisRestoreCli) -> Result<(), anyhow::Error> {
     }
 
     let redis_map: HashMap<String, RedisValue> = serde_json::from_slice(&buf)?;
-    for (key, value) in redis_map {
-        println!("{}: {:#?}", key, value);
-    }
+    // Build the RedisRestore object and connect to the server.
+    let mut rr = RedisRestore::build()
+        .with_url(args.url)
+        // .with_filter(args.filter)
+        .connect()?;
+
+    rr.fill_db(redis_map)?;
+
     Ok(())
 }
 
